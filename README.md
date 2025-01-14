@@ -48,48 +48,46 @@ Use the following example to define your pipeline script. Adjust paths and param
 ```groovy
 pipeline {
     agent any
-
     environment {
-        AWS_CREDENTIALS_ID = 'your-aws-credentials-id' // Jenkins AWS credentials ID
-        REGION = 'us-east-1'                           // AWS Region
-        LAMBDA_FUNCTION_NAME = 'your-lambda-function'  // Lambda function name
-        S3_BUCKET = 'your-s3-bucket-name'              // S3 bucket name
-        ZIP_FILE_PATH = 'lambda-package.zip'           // Path to your Lambda ZIP file
+        AWS_ACCESS_KEY_ID = credentials('AWS_CREDIENTIAL_INFO') // Jenkins credential ID
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_CREDIENTIAL_INFO')
+        AWS_REGION = 'us-east-1' // Change as needed
     }
-
     stages {
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                echo 'Checking out code...'
-                checkout scm
+                git branch: 'main', url: 'https://github.com/arifhossen/aws-lambda.git'
             }
         }
-
-        stage('Upload to S3') {
+        // stage('Install Dependencies') {
+        //     steps {
+        //         sh 'pip install -r requirements.txt -t .'
+        //     }
+        // }
+        stage('Package Lambda') {
             steps {
-                echo 'Uploading package to S3...'
-                withAWS(credentials: AWS_CREDENTIALS_ID, region: REGION) {
-                    s3Upload(file: ZIP_FILE_PATH, bucket: S3_BUCKET, path: ZIP_FILE_PATH)
-                }
+                sh '''
+                zip -r lambda-package.zip .
+                '''
             }
         }
-
-        stage('Deploy to Lambda') {
+        stage('Deploy to AWS Lambda') {
             steps {
-                echo 'Deploying Lambda function...'
-                withAWS(credentials: AWS_CREDENTIALS_ID, region: REGION) {
-                    sh "aws lambda update-function-code --function-name ${LAMBDA_FUNCTION_NAME} --s3-bucket ${S3_BUCKET} --s3-key ${ZIP_FILE_PATH}"
-                }
+                sh '''
+                aws lambda update-function-code \
+                --function-name aws-infra-deploy-dev-chatbot-lambda \
+                --zip-file fileb://lambda-package.zip \
+                --region $AWS_REGION
+                '''
             }
         }
     }
-
     post {
         success {
-            echo 'Lambda deployment successful!'
+            echo 'Deployment successful!'
         }
         failure {
-            echo 'Lambda deployment failed.'
+            echo 'Deployment failed!'
         }
     }
 }
